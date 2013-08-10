@@ -2,7 +2,7 @@
 
 This plugin adds the `get_avatar_url` function to WordPress.
 
-It is an implimentation of [Michael Adams՚ patch](http://core.trac.wordpress.org/ticket/21195#comment:12) from [ticket #21195](http://core.trac.wordpress.org/ticket/21195)
+It is an implimentation of [Michael Adams՚](https://github.com/mdawaffe) patch from [ticket #21195](http://core.trac.wordpress.org/ticket/21195#comment:12)
 
 
 ## What does it do?
