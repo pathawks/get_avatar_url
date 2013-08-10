@@ -6,7 +6,6 @@
  * @subpackage Template
  */
 
-
 /**
  * Retrieve the avatar URL for a user, email address, MD5 hash, comment, or post.
  *
