@@ -1572,100 +1572,119 @@ endif;
 
 if ( !function_exists( 'get_avatar' ) ) :
 /**
- * Retrieve the avatar for a user who provided a user ID or email address.
+ * Retrieve the avatar img tag for a user, email address, MD5 hash, comment, or post.
+ *
+ * @uses apply_filters() 'pre_get_avatar' to bypass
+ * @uses apply_filters() 'get_avatar' filters the result
  *
  * @since 2.5
- * @param int|string|object $id_or_email A user ID,  email address, or comment object
- * @param int $size Size of the avatar image
- * @param string $default URL to a default image to use if no avatar is available
- * @param string $alt Alternative text to use in image tag. Defaults to blank
- * @return string <img> tag for the user's avatar
-*/
-function get_avatar( $id_or_email, $size = '96', $default = '', $alt = false ) {
-	if ( ! get_option('show_avatars') )
-		return false;
+ * @param mixed $id_or_email The Gravatar to retrieve:
+ * 	(int)    {user_id}                   : Use the email address of the corresponding user
+ * 	(string) "{hash}@md5.gravatar.com"   : Use the hash directly
+ * 	(string) "{email}"
+ * 	(object) {User row or WP_User object}: Use the user's email
+ * 	(object) {Post row or WP_Post object}: Use the post_author's email
+ * 	(object) {Comment row}               : Use the comment's user_id or comment_author_email
+ * @param array $args
+ * 	size   : (int) Size of the avatar image
+ * 	default: (string) URL for the default image or a default type:
+ * 		404                    : Return a 404 instead of a default image @since 3.6
+ * 		retro                  : 8bit
+ * 		monsterid              : Monster
+ * 		wavatar                : cartoon face
+ * 		identicon              : the "quilt"
+ * 		mystery, mm, mysteryman: The Oyster Man
+ * 		blank                  : A transparent GIF
+ * 		gravatar_default       : Gravatar Logo
+ * 	force_default: (bool) Always show the default image, never the Gravatar
+ * 	rating : display avatars up to the given rating: G < PG < R < X.
+ *	scheme : (string) @see set_url_scheme()
+ * 	alt    : (string) value for the img element's alt attribute
+ * 	class  : (array|string) array or sttring of additional classes to add to the img element
+ * 	force_display: (bool) Always show the avatar - ignore the show_avatars option
+ *
+ * @return bool|string <img> tag for the user's avatar.  False on failure.
+ */
+// Old Parameters:   $id_or_email, $size = 96, $default = '', $alt = '' )
+function get_avatar( $id_or_email, $args = null ) {
+	$defaults = array(
+		// get_avatar_url() args
+		'size'          => 96,
+		'default'       => get_option( 'avatar_default', 'mystery' ),
+		'force_default' => false,
+		'rating'        => get_option( 'avatar_rating' ),
+		'scheme'        => null,
 
-	if ( false === $alt)
-		$safe_alt = '';
-	else
-		$safe_alt = esc_attr( $alt );
+		'alt'           => '',
+		'class'         => null,
+		'force_display' => false,
+	);
 
-	if ( !is_numeric($size) )
-		$size = '96';
+	if ( is_scalar( $args ) ) {
+		$args = array(
+			'size' => $args,
+		);
 
-	$email = '';
-	if ( is_numeric($id_or_email) ) {
-		$id = (int) $id_or_email;
-		$user = get_userdata($id);
-		if ( $user )
-			$email = $user->user_email;
-	} elseif ( is_object($id_or_email) ) {
-		// No avatar for pingbacks or trackbacks
-		$allowed_comment_types = apply_filters( 'get_avatar_comment_types', array( 'comment' ) );
-		if ( ! empty( $id_or_email->comment_type ) && ! in_array( $id_or_email->comment_type, (array) $allowed_comment_types ) )
-			return false;
+		$num_args = func_num_args();
+		if ( $num_args > 4 ) {
+			$num_args = 4;
+		}
 
-		if ( !empty($id_or_email->user_id) ) {
-			$id = (int) $id_or_email->user_id;
-			$user = get_userdata($id);
-			if ( $user)
-				$email = $user->user_email;
-		} elseif ( !empty($id_or_email->comment_author_email) ) {
-			$email = $id_or_email->comment_author_email;
+		switch ( $num_args ) {
+		// no breaks
+		case 4 :
+			$args['alt'] = func_get_arg( 3 );
+		case 3 :
+			$args['default'] = func_get_arg( 2 );
 		}
 	} else {
-		$email = $id_or_email;
+		$args = (array) $args;
 	}
 
-	if ( empty($default) ) {
-		$avatar_default = get_option('avatar_default');
-		if ( empty($avatar_default) )
-			$default = 'mystery';
-		else
-			$default = $avatar_default;
+	$original_args = $args;
+
+	$args = wp_parse_args( $args, $defaults );
+
+	$avatar = apply_filters_ref_array( 'pre_get_avatar', array( null, $id_or_email, &$args, $original_args ) );
+	if ( !is_null( $avatar ) ) {
+		return apply_filters( 'get_avatar', $avatar, $id_or_email, $args['size'], $args['default'], $args['alt'], $args, $original_args );
 	}
 
-	if ( !empty($email) )
-		$email_hash = md5( strtolower( trim( $email ) ) );
-
-	if ( is_ssl() ) {
-		$host = 'https://secure.gravatar.com';
-	} else {
-		if ( !empty($email) )
-			$host = sprintf( "http://%d.gravatar.com", ( hexdec( $email_hash[0] ) % 2 ) );
-		else
-			$host = 'http://0.gravatar.com';
+	if ( !$args['force_display'] && !get_option( 'show_avatars' ) ) {
+		return false;
 	}
 
-	if ( 'mystery' == $default )
-		$default = "$host/avatar/ad516503a11cd5ca435acc9bb6523536?s={$size}"; // ad516503a11cd5ca435acc9bb6523536 == md5('unknown@gravatar.com')
-	elseif ( 'blank' == $default )
-		$default = includes_url('images/blank.gif');
-	elseif ( !empty($email) && 'gravatar_default' == $default )
-		$default = '';
-	elseif ( 'gravatar_default' == $default )
-		$default = "$host/avatar/?s={$size}";
-	elseif ( empty($email) )
-		$default = "$host/avatar/?d=$default&amp;s={$size}";
-	elseif ( strpos($default, 'http://') === 0 )
-		$default = add_query_arg( 's', $size, $default );
-
-	if ( !empty($email) ) {
-		$out = "$host/avatar/";
-		$out .= $email_hash;
-		$out .= '?s='.$size;
-		$out .= '&amp;d=' . urlencode( $default );
-
-		$rating = get_option('avatar_rating');
-		if ( !empty( $rating ) )
-			$out .= "&amp;r={$rating}";
-
-		$avatar = "<img alt='{$safe_alt}' src='{$out}' class='avatar avatar-{$size} photo' height='{$size}' width='{$size}' />";
-	} else {
-		$avatar = "<img alt='{$safe_alt}' src='{$default}' class='avatar avatar-{$size} photo avatar-default' height='{$size}' width='{$size}' />";
+	$processed_args = null;
+	$args['processed_args'] =& $processed_args;
+	$url = get_avatar_url( $id_or_email, $args );
+	if ( !$url || is_wp_error( $url ) ) {
+		return false;
 	}
 
-	return apply_filters('get_avatar', $avatar, $id_or_email, $size, $default, $alt);
+	$class = array( 'avatar', 'avatar-' . (int) $processed_args['size'], 'photo' );
+
+	if ( !$processed_args['found_avatar'] || $processed_args['force_default'] ) {
+		$class[] = ' avatar-default';
+	}
+
+	if ( $args['class'] ) {
+		if ( is_array( $args['class'] ) ) {
+			$class = array_merge( $class, $args['class'] );
+		} else {
+			$class[] = $args['class'];
+		}
+	}
+
+	$avatar = sprintf(
+		'<img alt="%s" src="%s" class="%s" height="%d" width="%d" />',
+		esc_attr( $processed_args['alt'] ),
+		esc_url( $url ),
+		esc_attr( join( ' ', $class ) ),
+		(int) $processed_args['size'],
+		(int) $processed_args['size']
+	);
+
+	return apply_filters( 'get_avatar', $avatar, $id_or_email, $args['size'], $args['default'], $args['alt'], $processed_args, $original_args );
 }
 endif;
 
